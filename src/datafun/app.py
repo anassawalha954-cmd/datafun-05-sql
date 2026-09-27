@@ -1,4 +1,4 @@
-"""src/datafun/app.py - Project script.
+"""src/datafun/app.py - Project script (customized: health domain).
 
 Author: Anas
 Date: 2026-09
@@ -15,16 +15,18 @@ uv run python -m datafun.app
 
 DOMAIN:
 
-A small business with regions, stores, and employees.
+A small clinic network with clinics, patients, visits, and lab results.
 
-The data is stored in three related CSV files:
+The data is stored in four related CSV files:
 
-- one row per region
-- one row per store
-- one row per employee
+- one row per clinic
+- one row per patient
+- one row per visit
+- one row per lab result
 
-One region can have many stores.
-One store can have many employees.
+One clinic can have many patients.
+One patient can have many visits.
+One visit can have many lab results.
 
 EXPLORE:
 
@@ -76,91 +78,89 @@ import pandas as pd
 
 LOG: logging.Logger = get_logger("P05", level="DEBUG")
 
-# === DECLARE GLOBAL CONSTANTS ===
-
-# Some global variables are CONSTANT.
-# They do NOT change while the program runs.
-# By convention, constants use UPPERCASE_WITH_UNDERSCORES.
-# Final indicates that the value should not be reassigned.
-
 # === LOCATE THE DATA FILES ===
 
-DATA_DIR: Final[Path] = Path("data") / "retail"
+DATA_DIR: Final[Path] = Path("data") / "health"
 
-REGION_FILE: Final[Path] = DATA_DIR / "region.csv"
-STORE_FILE: Final[Path] = DATA_DIR / "store.csv"
-EMPLOYEE_FILE: Final[Path] = DATA_DIR / "employee.csv"
+CLINIC_FILE: Final[Path] = DATA_DIR / "clinic.csv"
+PATIENT_FILE: Final[Path] = DATA_DIR / "patient.csv"
+VISIT_FILE: Final[Path] = DATA_DIR / "visit.csv"
+LAB_RESULT_FILE: Final[Path] = DATA_DIR / "lab_result.csv"
 
 # === LOCATE THE SQLITE DATABASE ===
 
-DATABASE_FILE: Final[Path] = DATA_DIR / "business.sqlite"
+DATABASE_FILE: Final[Path] = DATA_DIR / "health.sqlite"
 
 # === LOCATE THE CHART OUTPUT ===
 
 CHART_DIR: Final[Path] = Path("docs") / "images"
-CHART_PATH: Final[Path] = CHART_DIR / "first-chart.png"
+CHART_PATH: Final[Path] = CHART_DIR / "health-chart.png"
 
 # === DETERMINE WHAT ONE ROW REPRESENTS ===
 
-REGION_GRAIN: Final[str] = "one business region"
-STORE_GRAIN: Final[str] = "one store"
-EMPLOYEE_GRAIN: Final[str] = "one employee"
+CLINIC_GRAIN: Final[str] = "one clinic"
+PATIENT_GRAIN: Final[str] = "one patient"
+VISIT_GRAIN: Final[str] = "one visit"
+LAB_RESULT_GRAIN: Final[str] = "one lab test result from one visit"
 
 # === DESCRIBE THE TABLE RELATIONSHIPS ===
 
 RELATIONSHIP_DECISION: Final[str] = r"""
-The data is stored in three related tables.
+The data is stored in four related tables.
 
-One region can have many stores.
-The stores table uses region_id to identify each store's region.
+One clinic can have many patients.
+The patients table uses clinic_id to identify each patient's clinic.
 
-One store can have many employees.
-The employees table uses store_id to identify each employee's store.
+One patient can have many visits.
+The visits table uses patient_id to identify each visit's patient.
 
-The shared keys connect information stored in different tables.
+One visit can have many lab results.
+The lab_results table uses visit_id to identify each result's visit.
+
+The shared keys connect information stored across all four tables.
 """
 
 # === DEFINE THE ANALYTICAL QUESTION ===
 
 CUSTOM_QUERY_DECISION: Final[str] = r"""
-I want to compare the number of employees working at each store.
-The result should have one row per store.
+I want to compare the average Glucose lab result
+across patient age groups.
 
-The information I need requires all three tables:
- - region name is in regions,
- - store name is in stores,
- - employee info is in employees.
+The result should have one row per age_group.
+
+The information I need requires three tables:
+ - age_group is in patients,
+ - visit_id links patients to visits,
+ - result_value (for test_name = 'Glucose') is in lab_results.
 """
 
 # === WRITE THE SQL QUERY ===
 
 CUSTOM_SQL_QUERY: Final[str] = """
 SELECT
-    r.region_name,
-    s.store_name,
-    COUNT(e.employee_id) AS employee_count
-FROM regions AS r
-JOIN stores AS s
-    ON r.region_id = s.region_id
-LEFT JOIN employees AS e
-    ON s.store_id = e.store_id
+    p.age_group,
+    ROUND(AVG(lr.result_value), 1) AS avg_glucose,
+    COUNT(lr.lab_result_id) AS test_count
+FROM patients AS p
+JOIN visits AS v
+    ON p.patient_id = v.patient_id
+JOIN lab_results AS lr
+    ON v.visit_id = lr.visit_id
+WHERE lr.test_name = 'Glucose'
 GROUP BY
-    r.region_name,
-    s.store_name
+    p.age_group
 ORDER BY
-    employee_count DESC;
+    p.age_group;
 """
 
 # === CHOOSE A VISUALIZATION ===
 
 CUSTOM_CHART_DECISION: Final[str] = r"""
 The query result has one numeric value
-(employee count) for each store.
+(average glucose) for each age group.
 
 A bar chart works for comparing
 a numeric value across named categories.
-Every pandas df has a
-plot.box() method for creating box plots.
 """
 
 
@@ -175,7 +175,7 @@ def main() -> None:
     Arguments: None.
     Returns: None.
     """
-    log_header(LOG, "P05 - PYTHON AND SQL")
+    log_header(LOG, "P05 - PYTHON AND SQL (HEALTH DOMAIN)")
 
     LOG.info("===================================")
     LOG.info("START main()")
@@ -185,13 +185,15 @@ def main() -> None:
     LOG.info("01. LOAD the related tables.")
     LOG.info("-------------------------------")
 
-    log_path(LOG, "regions file", path=REGION_FILE)
-    log_path(LOG, "stores file", path=STORE_FILE)
-    log_path(LOG, "employees file", path=EMPLOYEE_FILE)
+    log_path(LOG, "clinics file", path=CLINIC_FILE)
+    log_path(LOG, "patients file", path=PATIENT_FILE)
+    log_path(LOG, "visits file", path=VISIT_FILE)
+    log_path(LOG, "lab results file", path=LAB_RESULT_FILE)
 
-    regions_df: pd.DataFrame = pd.read_csv(REGION_FILE)
-    stores_df: pd.DataFrame = pd.read_csv(STORE_FILE)
-    employees_df: pd.DataFrame = pd.read_csv(EMPLOYEE_FILE)
+    clinics_df: pd.DataFrame = pd.read_csv(CLINIC_FILE)
+    patients_df: pd.DataFrame = pd.read_csv(PATIENT_FILE)
+    visits_df: pd.DataFrame = pd.read_csv(VISIT_FILE)
+    lab_results_df: pd.DataFrame = pd.read_csv(LAB_RESULT_FILE)
 
     LOG.info("Related tables loaded successfully.")
 
@@ -199,13 +201,15 @@ def main() -> None:
     LOG.info("02. INSPECT the grain and keys.")
     LOG.info("-------------------------------")
 
-    LOG.info(f"Regions grain: {REGION_GRAIN}")
-    LOG.info(f"Stores grain: {STORE_GRAIN}")
-    LOG.info(f"Employees grain: {EMPLOYEE_GRAIN}")
+    LOG.info(f"Clinics grain: {CLINIC_GRAIN}")
+    LOG.info(f"Patients grain: {PATIENT_GRAIN}")
+    LOG.info(f"Visits grain: {VISIT_GRAIN}")
+    LOG.info(f"Lab results grain: {LAB_RESULT_GRAIN}")
 
-    LOG.info(f"Regions columns: {regions_df.columns.tolist()}")
-    LOG.info(f"Stores columns: {stores_df.columns.tolist()}")
-    LOG.info(f"Employees columns: {employees_df.columns.tolist()}")
+    LOG.info(f"Clinics columns: {clinics_df.columns.tolist()}")
+    LOG.info(f"Patients columns: {patients_df.columns.tolist()}")
+    LOG.info(f"Visits columns: {visits_df.columns.tolist()}")
+    LOG.info(f"Lab results columns: {lab_results_df.columns.tolist()}")
 
     LOG.info(RELATIONSHIP_DECISION)
 
@@ -223,22 +227,29 @@ def main() -> None:
     LOG.info("04. LOAD the tables into SQLite.")
     LOG.info("-------------------------------")
 
-    regions_df.to_sql(
-        "regions",
+    clinics_df.to_sql(
+        "clinics",
         connection,
         if_exists="replace",
         index=False,
     )
 
-    stores_df.to_sql(
-        "stores",
+    patients_df.to_sql(
+        "patients",
         connection,
         if_exists="replace",
         index=False,
     )
 
-    employees_df.to_sql(
-        "employees",
+    visits_df.to_sql(
+        "visits",
+        connection,
+        if_exists="replace",
+        index=False,
+    )
+
+    lab_results_df.to_sql(
+        "lab_results",
         connection,
         if_exists="replace",
         index=False,
@@ -266,21 +277,21 @@ def main() -> None:
 
     LOG.info(CUSTOM_CHART_DECISION)
 
-    employee_ax = result_df.plot.bar(
-        x="store_name",
-        y="employee_count",
+    glucose_ax = result_df.plot.bar(
+        x="age_group",
+        y="avg_glucose",
         legend=False,
     )
 
     # CUSTOM: The analyst can customize the returned Matplotlib Axes object.
-    employee_ax.set_title("Employees by Store")
-    employee_ax.set_xlabel("Store")
-    employee_ax.set_ylabel("Number of Employees")
+    glucose_ax.set_title("Average Glucose Result by Patient Age Group")
+    glucose_ax.set_xlabel("Age Group")
+    glucose_ax.set_ylabel("Average Glucose (mg/dL)")
 
     CHART_DIR.mkdir(parents=True, exist_ok=True)
 
     save_chart(
-        employee_ax,
+        glucose_ax,
         CHART_PATH,
     )
 
@@ -297,9 +308,10 @@ def main() -> None:
 
     LOG.info(r"""CUSTOM OBSERVATIONS:
     The SQL query connected information from
-    the regions, stores, and employees tables.
+    the patients, visits, and lab_results tables,
+    filtering for Glucose test results only.
 
-    The result has one row per store.
+    The result has one row per age group.
 
     I observed ...
 
@@ -324,10 +336,7 @@ def main() -> None:
 
 # === CONDITIONAL EXECUTION GUARD ===
 
-# WHY: This is standard Python "boilerplate" - we copy and paste it
-# into every Python script. It is a "conditional execution" guard,
-# meaning: if this file is being run as a script, then execute the code
-# in the main() function.
-
 if __name__ == "__main__":
     main()
+
+

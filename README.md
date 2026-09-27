@@ -63,6 +63,9 @@ This project produces the same results in several useful forms.
 
 ## Initial Results
 
+<img width="612" height="479" alt="image" src="https://github.com/user-attachments/assets/a32822c3-d106-4fec-8151-287b0cabccf7" />
+
+
 ![One analyst-selected chart](docs/images/first-chart.png)
 
 ![Marimo reactive app preview](docs/images/marimo-local-preview.png)

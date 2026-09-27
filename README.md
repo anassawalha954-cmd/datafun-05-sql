@@ -70,6 +70,42 @@ This project produces the same results in several useful forms.
 
 ![Marimo reactive app preview](docs/images/marimo-local-preview.png)
 
+## My Custom Analysis
+
+[#my-custom-analysis](#my-custom-analysis)
+
+For this project, I replaced the retail example with a **health**
+domain dataset, exploring a clinic network with four related tables
+instead of three: **clinics → patients → visits → lab_results**.
+
+### What I Changed
+
+- Swapped the data source from `data/retail` to `data/health`.
+- Extended the join chain to three related tables instead of two,
+  connecting `patients` → `visits` → `lab_results` on their shared keys.
+- Wrote a new SQL query that filters lab results by
+  `test_name = 'Glucose'` and aggregates by `age_group`.
+- Replaced the bar chart to visualize average Glucose results by
+  patient age group instead of employee counts by store.
+
+### Analytical Question
+
+**Does the average Glucose lab result differ across patient age groups?**
+
+### Why This Question
+
+Age is a common factor considered in health screening. Comparing an
+average lab result across age groups is a simple but realistic way to
+see whether a pattern in the data is worth a closer look.
+
+### Result
+
+The average Glucose result did not increase steadily with age as I
+initially expected. The **35-49** age group had the highest average
+Glucose result (around 110 mg/dL), the **18-34** and **50-64** groups
+were both around 100 mg/dL, and the **65+** age group actually had
+the lowest average (around 90 mg/dL).
+
 ## Important Folders and Files
 
 - **data/*** - raw CSV input files
